@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Minecraft - 3D 我的世界</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #1a1a2e;
+            font-family: 'Courier New', monospace;
+            user-select: none;
+        }
+        
+        #gameCanvas {
+            display: block;
+            cursor: none;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+        
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            top: 9px;
+            left: 0;
+        }
+        
+        #hotbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px;
+            border-radius: 5px;
+            border: 2px solid #555;
+        }
+        
+        .slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #777;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            position: relative;
+            transition: transform 0.1s;
+        }
+        
+        .slot.active {
+            border-color: #fff;
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        
+        .slot-number {
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        #block-preview {
+            width: 40px;
+            height: 40px;
+            image-rendering: pixelated;
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 300px;
+        }
+        
+        #instructions h3 {
+            margin-bottom: 10px;
+            color: #0f0;
+        }
+        
+        #instructions kbd {
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #666;
+            font-family: monospace;
+        }
+        
+        #block-highlight {
+            position: absolute;
+            pointer-events: none;
+            display: none;
+        }
+        
+        #fps {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #0f0;
+            font-size: 16px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+        
+        .progress-bar {
+            width: 300px;
+            height: 20px;
+            background: #333;
+            border: 2px solid #666;
+            margin-top: 20px;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0f0, #0a0);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div id="crosshair"></div>
+        
+        <div id="hotbar">
+            <div class="slot active" data-block="grass"><span class="slot-number">1</span><div style="width:30px;height:30px;background:#5d8c47;border:2px solid #3d5c27;"></div></div>
+            <div class="slot" data-block="dirt"><span class="slot-number">2</span><div style="width:30px;height:30px;background:#8b6f47;border:2px solid #5d4a2f;"></div></div>
+            <div class="slot" data-block="stone"><span class="slot-number">3</span><div style="width:30px;height:30px;background:#7a7a7a;border:2px solid #555;"></div></div>
+            <div class="slot" data-block="wood"><span class="slot-number">4</span><div style="width:30px;height:30px;background:#8b5a2b;border:2px solid #5d3a1a;"></div></div>
+            <div class="slot" data-block="leaves"><span class="slot-number">5</span><div style="width:30px;height:30px;background:#4a7c38;border:2px solid #2d5a23;"></div></div>
+            <div class="slot" data-block="sand"><span class="slot-number">6</span><div style="width:30px;height:30px;background:#e6d5a7;border:2px solid #c4b896;"></div></div>
+            <div class="slot" data-block="water"><span class="slot-number">7</span><div style="width:30px;height:30px;background:#3d7ab5;border:2px solid #2d5a8a;"></div></div>
+            <div class="slot" data-block="glass"><span class="slot-number">8</span><div style="width:30px;height:30px;background:#a8d5e5;border:2px solid #7fb3c9;"></div></div>
+            <div class="slot" data-block="brick"><span class="slot-number">9</span><div style="width:30px;height:30px;background:#a0522d;border:2px solid #8b4513;"></div></div>
+        </div>
+        
+        <div id="instructions">
+            <h3>🎮 控制说明</h3>
+            <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> - 移动</div>
+            <div><kbd>空格</kbd> - 跳跃 (双击飞行)</div>
+            <div><kbd>Shift</kbd> - 潜行/下降</div>
+            <div><kbd>鼠标</kbd> - 视角</div>
+            <div><kbd>左键</kbd> - 破坏方块</div>
+            <div><kbd>右键</kbd> - 放置方块</div>
+            <div><kbd>1-9</kbd> - 选择方块</div>
+            <div><kbd>F</kbd> - 切换飞行模式</div>
+            <div><kbd>ESC</kbd> - 释放鼠标</div>
+        </div>
+        
+        <div id="fps">FPS: 60</div>
+        
+        <div id="loading">
+            <div>正在生成世界...</div>
+            <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+        </div>
+    </div>
+
+    <script>
+        // 游戏配置
+        const CONFIG = {
+            CHUNK_SIZE: 16,
+            CHUNK_HEIGHT: 128,
+            RENDER_DISTANCE: 6,
+            FOV: 75,
+            NEAR: 0.1,
+            FAR: 1000,
+            GRAVITY: -0.6,
+            JUMP_FORCE: 0.15,
+            SPEED: 0.1,
+            FLY_SPEED: 0.2
+        };
+
+        // 方块类型定义
+        const BLOCK_TYPES = {
+            air: { id: 0, color: [0, 0, 0, 0], transparent: true },
+            grass: { id: 1, color: [0.36, 0.55, 0.28], texture: 'grass' },
+            dirt: { id: 2, color: [0.55, 0.44, 0.28], texture: 'dirt' },
+            stone: { id: 3, color: [0.48, 0.48, 0.48], texture: 'stone' },
+            wood: { id: 4, color: [0.55, 0.35, 0.17], texture: 'wood' },
+            leaves: { id: 5, color: [0.29, 0.49, 0.22], texture: 'leaves', transparent: true },
+            sand: { id: 6, color: [0.9, 0.84, 0.65], texture: 'sand' },
+            water: { id: 7, color: [0.24, 0.48, 0.71], texture: 'water', transparent: true, liquid: true },
+            glass: { id: 8, color: [0.66, 0.84, 0.9], texture: 'glass', transparent: true },
+            brick: { id: 9, color: [0.63, 0.32, 0.18], texture: 'brick' }
+        };
+
+        // 着色器代码
+        const VERTEX_SHADER = `
+            attribute vec3 aPosition;
+            attribute vec2 aTexCoord;
+            attribute vec3 aNormal;
+            attribute float aBlockType;
+            
+            uniform mat4 uProjectionMatrix;
+            uniform mat4 uViewMatrix;
+            uniform mat4 uModelMatrix;
+            
+            varying vec2 vTexCoord;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            varying float vBlockType;
+            varying float vDepth;
+            
+            void main() {
+                vec4 worldPos = uModelMatrix * vec4(aPosition, 1.0);
+                vec4 viewPos = uViewMatrix * worldPos;
+                gl_Position = uProjectionMatrix * viewPos;
+                
+                vTexCoord = aTexCoord;
+                vNormal = mat3(uModelMatrix) * aNormal;
+                vPosition = worldPos.xyz;
+                vBlockType = aBlockType;
+                vDepth = -viewPos.z;
+            }
+        `;
+
+        const FRAGMENT_SHADER = `
+            precision mediump float;
+            
+            varying vec2 vTexCoord;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            varying float vBlockType;
+            varying float vDepth;
+            
+            uniform vec3 uCameraPos;
+            uniform float uTime;
+            uniform sampler2D uTextureAtlas;
+            
+            // 简单的噪声函数
+            float random(vec2 st) {
+                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+            }
+            
+            void main() {
+                vec3 baseColor;
+                float alpha = 1.0;
+                
+                // 根据方块类型设置颜色
+                int blockType = int(vBlockType);
+                
+                if (blockType == 1) { // grass
+                    baseColor = vec3(0.36, 0.55, 0.28);
+                    // 添加草地纹理变化
+                    float noise = random(floor(vPosition.xz * 2.0));
+                    baseColor *= 0.9 + noise * 0.2;
+                } else if (blockType == 2) { // dirt
+                    baseColor = vec3(0.55, 0.44, 0.28);
+                } else if (blockType == 3) { // stone
+                    baseColor = vec3(0.48, 0.48, 0.48);
+                    float noise = random(floor(vPosition.xyz * 4.0));
+                    baseColor *= 0.8 + noise * 0.4;
+                } else if (blockType == 4) { // wood
+                    baseColor = vec3(0.55, 0.35, 0.17);
+                    // 木纹
+                    float woodPattern = sin(vPosition.y * 20.0) * 0.1;
+                    baseColor += woodPattern;
+                } else if (blockType == 5) { // leaves
+                    baseColor = vec3(0.29, 0.49, 0.22);
+                    alpha = 0.9;
+                } else if (blockType == 6) { // sand
+                    baseColor = vec3(0.9, 0.84, 0.65);
+                    float noise = random(floor(vPosition.xz * 3.0));
+                    baseColor *= 0.9 + noise * 0.2;
+                } else if (blockType == 7) { // water
+                    baseColor = vec3(0.24, 0.48, 0.71);
+                    alpha = 0.6;
+                    // 水波动画
+                    baseColor += sin(vPosition.x * 2.0 + uTime) * 0.02;
+                    baseColor += cos(vPosition.z * 2.0 + uTime * 0.8) * 0.02;
+                } else if (blockType == 8) { // glass
+                    baseColor = vec3(0.66, 0.84, 0.9);
+                    alpha = 0.3;
+                } else if (blockType == 9) { // brick
+                    baseColor = vec3(0.63, 0.32, 0.18);
+                    // 砖块图案
+                    vec2 brick = fract(vPosition.xz * 2.0);
+                    if (brick.x < 0.05 || brick.y < 0.05) {
+                        baseColor *= 0.7;
+                    }
+                } else {
+                    baseColor = vec3(0.5);
+                }
+                
+                // 光照计算
+                vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+                float diff = max(dot(normalize(vNormal), lightDir), 0.0);
+                float ambient = 0.4;
+                float lighting = ambient + diff * 0.6;
+                
+                // 阴影（简单的AO效果）
+                float ao = 1.0;
+                if (vNormal.y < 0.0) ao = 0.5; // 底部面更暗
+                
+                // 雾效
+                float fogDistance = length(vPosition - uCameraPos);
+                float fogDensity = 0.02;
+                float fogFactor = 1.0 - exp(-fogDistance * fogDensity);
+                vec3 fogColor = vec3(0.6, 0.8, 1.0);
+                
+                vec3 finalColor = baseColor * lighting * ao;
+                finalColor = mix(finalColor, fogColor, fogFactor * 0.5);
+                
+                gl_FragColor = vec4(finalColor, alpha);
+                
+                // 距离裁剪
+                if (vDepth > 100.0) discard;
+            }
+        `;
+
+        // 游戏状态
+        const state = {
+            camera: {
+                x: 0, y: 80, z: 0,
+                pitch: 0, yaw: 0,
+                vx: 0, vy: 0, vz: 0,
+                onGround: false,
+                flying: false
+            },
+            keys: {},
+            mouse: { x: 0, y: 0, locked: false },
+            selectedBlock: 1,
+            chunks: new Map(),
+            blocks: new Map(), // 全局方块存储
+            renderList: [],
+            lastTime: 0,
+            fps: 60,
+            frameCount: 0,
+            lastFpsTime: 0
+        };
+
+        // WebGL 上下文
+        let gl, program, buffers;
+        let uniforms = {};
+
+        // 初始化 WebGL
+        function initWebGL() {
+            const canvas = document.getElementById('gameCanvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            gl = canvas.getContext('webgl', { antialias: true, alpha: false }) || 
+                 canvas.getContext('experimental-webgl');
+            
+            if (!gl) {
+                alert('WebGL 不支持');
+                return false;
+            }
+            
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.CULL_FACE);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            
+            // 创建着色器程序
+            const vs = createShader(gl.VERTEX_SHADER, VERTEX_SHADER);
+            const fs = createShader(gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
+            program = createProgram(vs, fs);
+            
+            // 获取属性和uniform位置
+            const attribs = {
+                position: gl.getAttribLocation(program, 'aPosition'),
+                texCoord: gl.getAttribLocation(program, 'aTexCoord'),
+                normal: gl.getAttribLocation(program, 'aNormal'),
+                blockType: gl.getAttribLocation(program, 'aBlockType')
+            };
+            
+            uniforms = {
+                projectionMatrix: gl.getUniformLocation(program, 'uProjectionMatrix'),
+                viewMatrix: gl.getUniformLocation(program, 'uViewMatrix'),
+                modelMatrix: gl.getUniformLocation(program, 'uModelMatrix'),
+                cameraPos: gl.getUniformLocation(program, 'uCameraPos'),
+                time: gl.getUniformLocation(program, 'uTime')
+            };
+            
+            // 创建几何体缓冲区
+            buffers = createGeometryBuffers();
+            
+            return true;
+        }
+
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function createProgram(vs, fs) {
+            const program = gl.createProgram();
+            gl.attachShader(program, vs);
+            gl.attachShader(program, fs);
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('Program link error:', gl.getProgramInfoLog(program));
+                return null;
+            }
+            return program;
+        }
+
+        // 创建方块几何体（优化：只创建可见面）
+        function createGeometryBuffers() {
+            const vertices = [];
+            const texCoords = [];
+            const normals = [];
+            const indices = [];
+            let indexOffset = 0;
+
+            // 面的定义（位置，法线，纹理坐标）
+            const faces = [
+                // 右面 (+X)
+                { normal: [1, 0, 0], verts: [[1,0,0], [1,1,0], [1,1,1], [1,0,1]] },
+                // 左面 (-X)
+                { normal: [-1, 0, 0], verts: [[0,0,1], [0,1,1], [0,1,0], [0,0,0]] },
+                // 上面 (+Y)
+                { normal: [0, 1, 0], verts: [[0,1,0], [0,1,1], [1,1,1], [1,1,0]] },
+                // 下面 (-Y)
+                { normal: [0, -1, 0], verts: [[0,0,1], [0,0,0], [1,0,0], [1,0,1]] },
+                // 前面 (+Z)
+                { normal: [0, 0, 1], verts: [[0,0,1], [1,0,1], [1,1,1], [0,1,1]] },
+                // 后面 (-Z)
+                { normal: [0, 0, -1], verts: [[1,0,0], [0,0,0], [0,1,0], [1,1,0]] }
+            ];
+
+            faces.forEach(face => {
+                // 添加顶点
+                face.verts.forEach(v => {
+                    vertices.push(...v);
+                    normals.push(...face.normal);
+                    texCoords.push(v[0], v[1]); // 简单的UV映射
+                });
+                
+                // 添加索引（两个三角形）
+                indices.push(
+                    indexOffset, indexOffset + 1, indexOffset + 2,
+                    indexOffset, indexOffset + 2, indexOffset + 3
+                );
+                indexOffset += 4;
+            });
+
+            const vbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+            const nbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, nbo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+
+            const tbo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, tbo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
+
+            const ibo = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+            return { vbo, nbo, tbo, ibo, count: indices.length };
+        }
+
+        // 简单的噪声函数（用于地形生成）
+        function noise(x, z) {
+            const sin = Math.sin;
+            return (sin(x * 0.1) + sin(z * 0.1)) * 2 + 
+                   (sin(x * 0.3) * 0.5 + sin(z * 0.3) * 0.5) +
+                   (sin(x * 0.05) * 2 + sin(z * 0.05) * 2);
+        }
+
+        // 生成区块
+        function generateChunk(cx, cz) {
+            const chunk = {
+                x: cx,
+                z: cz,
+                blocks: new Map(),
+                mesh: null,
+                dirty: true
+            };
+
+            const worldX = cx * CONFIG.CHUNK_SIZE;
+            const worldZ = cz * CONFIG.CHUNK_SIZE;
+
+            // 生成地形
+            for (let x = 0; x < CONFIG.CHUNK_SIZE; x++) {
+                for (let z = 0; z < CONFIG.CHUNK_SIZE; z++) {
+                    const wx = worldX + x;
+                    const wz = worldZ + z;
+                    
+                    // 高度图
+                    const height = Math.floor(30 + noise(wx, wz) * 10);
+                    
+                    for (let y = 0; y < CONFIG.CHUNK_HEIGHT; y++) {
+                        let block = 0;
+                        
+                        if (y < height - 3) {
+                            block = 3; // stone
+                        } else if (y < height) {
+                            block = 2; // dirt
+                        } else if (y === height) {
+                            block = 1; // grass
+                            
+                            // 随机生成树
+                            if (Math.random() < 0.02 && x > 2 && x < CONFIG.CHUNK_SIZE - 2 && 
+                                z > 2 && z < CONFIG.CHUNK_SIZE - 2) {
+                                generateTree(chunk, x, y + 1, z);
+                            }
+                        } else if (y < 20) {
+                            block = 7; // water
+                        }
+                        
+                        if (block !== 0) {
+                            chunk.blocks.set(`${x},${y},${z}`, block);
+                            state.blocks.set(`${wx},${y},${wz}`, block);
+                        }
+                    }
+                }
+            }
+
+            return chunk;
+        }
+
+        function generateTree(chunk, x, y, z) {
+            const trunkHeight = 4 + Math.floor(Math.random() * 2);
+            
+            // 树干
+            for (let i = 0; i < trunkHeight; i++) {
+                chunk.blocks.set(`${x},${y + i},${z}`, 4);
+            }
+            
+            // 树叶
+            const leafStart = y + trunkHeight - 2;
+            for (let ly = leafStart; ly < leafStart + 3; ly++) {
+                const radius = ly === leafStart + 2 ? 1 : 2;
+                for (let lx = -radius; lx <= radius; lx++) {
+                    for (let lz = -radius; lz <= radius; lz++) {
+                        if (lx === 0 && lz === 0 && ly < leafStart + 2) continue;
+                        if (Math.abs(lx) + Math.abs(lz) > radius + 1) continue;
+                        
+                        const key = `${x + lx},${ly},${z + lz}`;
+                        if (!chunk.blocks.has(key)) {
+                            chunk.blocks.set(key, 5);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 更新区块网格（只渲染可见面）
+        function updateChunkMesh(chunk) {
+            if (!chunk.dirty) return;
+            
+            const instances = [];
+            const cx = chunk.x * CONFIG.CHUNK_SIZE;
+            const cz = chunk.z * CONFIG.CHUNK_SIZE;
+
+            chunk.blocks.forEach((block, key) => {
+                if (block === 0) return;
+                
+                const [x, y, z] = key.split(',').map(Number);
+                const wx = cx + x;
+                const wy = y;
+                const wz = cz + z;
+
+                // 检查六个邻居，如果邻居是空气或透明方块，则渲染这个面
+                const neighbors = [
+                    [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+                ];
+
+                neighbors.forEach((dir, faceIndex) => {
+                    const nx = wx + dir[0];
+                    const ny = wy + dir[1];
+                    const nz = wz + dir[2];
+                    
+                    const neighborBlock = getBlock(nx, ny, nz);
+                    const blockInfo = Object.values(BLOCK_TYPES).find(b => b.id === block);
+                    
+                    if (neighborBlock === 0 || 
+                        Object.values(BLOCK_TYPES).find(b => b.id === neighborBlock)?.transparent) {
+                        instances.push({
+                            x: wx, y: wy, z: wz,
+                            face: faceIndex,
+                            blockType: block
+                        });
+                    }
+                });
+            });
+
+            chunk.mesh = instances;
+            chunk.dirty = false;
+        }
+
+        function getBlock(x, y, z) {
+            if (y < 0 || y >= CONFIG.CHUNK_HEIGHT) return 0;
+            return state.blocks.get(`${x},${y},${z}`) || 0;
+        }
+
+        function setBlock(x, y, z, block) {
+            const cx = Math.floor(x / CONFIG.CHUNK_SIZE);
+            const cz = Math.floor(z / CONFIG.CHUNK_SIZE);
+            const chunkKey = `${cx},${cz}`;
+            const chunk = state.chunks.get(chunkKey);
+            
+            if (chunk) {
+                const lx = x - cx * CONFIG.CHUNK_SIZE;
+                const lz = z - cz * CONFIG.CHUNK_SIZE;
+                
+                if (block === 0) {
+                    chunk.blocks.delete(`${lx},${y},${lz}`);
+                    state.blocks.delete(`${x},${y},${z}`);
+                } else {
+                    chunk.blocks.set(`${lx},${y},${z}`, block);
+                    state.blocks.set(`${x},${y},${z}`, block);
+                }
+                
+                chunk.dirty = true;
+                
+                // 标记相邻区块为脏（如果修改的是边界）
+                if (lx === 0) markChunkDirty(cx - 1, cz);
+                if (lx === CONFIG.CHUNK_SIZE - 1) markChunkDirty(cx + 1, cz);
+                if (lz === 0) markChunkDirty(cx, cz - 1);
+                if (lz === CONFIG.CHUNK_SIZE - 1) markChunkDirty(cx, cz + 1);
+            }
+        }
+
+        function markChunkDirty(cx, cz) {
+            const chunk = state.chunks.get(`${cx},${cz}`);
+            if (chunk) chunk.dirty = true;
+        }
+
+        // 矩阵运算
+        function mat4() {
+            return new Float32Array(16);
+        }
+
+        function identity(out) {
+            out[0] = 1; out[1] = 0; out[2] = 0; out[3] = 0;
+            out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0;
+            out[8] = 0; out[9] = 0; out[10] = 1; out[11] = 0;
+            out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1;
+            return out;
+        }
+
+        function perspective(out, fovy, aspect, near, far) {
+            const f = 1.0 / Math.tan(fovy / 2);
+            const nf = 1 / (near - far);
+            out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+            out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+            out[8] = 0; out[9] = 0; out[10] = (far + near) * nf; out[11] = -1;
+            out[12] = 0; out[13] = 0; out[14] = 2 * far * near * nf; out[15] = 0;
+            return out;
+        }
+
+        function lookAt(out, eye, center, up) {
+            let x0, x1, x2, y0, y1, y2, z0, z1, z2, len;
+            const eyex = eye[0], eyey = eye[1], eyez = eye[2];
+            const upx = up[0], upy = up[1], upz = up[2];
+            const centerx = center[0], centery = center[1], centerz = center[2];
+
+            z0 = eyex - centerx; z1 = eyey - centery; z2 = eyez - centerz;
+            len = 1 / Math.sqrt(z0 * z0 + z1 * z1 + z2 * z2); z0 *= len; z1 *= len; z2 *= len;
+
+            x0 = upy * z2 - upz * z1; x1 = upz * z0 - upx * z2; x2 = upx * z1 - upy * z0;
+            len = Math.sqrt(x0 * x0 + x1 * x1 + x2 * x2); if (!len) len = 1; else len = 1 / len;
+            x0 *= len; x1 *= len; x2 *= len;
+
+            y0 = z1 * x2 - z2 * x1; y1 = z2 * x0 - z0 * x2; y2 = z0 * x1 - z1 * x0;
+
+            out[0] = x0; out[1] = y0; out[2] = z0; out[3] = 0;
+            out[4] = x1; out[5] = y1; out[6] = z1; out[7] = 0;
+            out[8] = x2; out[9] = y2; out[10] = z2; out[11] = 0;
+            out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+            out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+            out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+            out[15] = 1;
+            return out;
+        }
+
+        function translate(out, a, v) {
+            out[0] = a[0]; out[1] = a[1]; out[2] = a[2]; out[3] = a[3];
+            out[4] = a[4]; out[5] = a[5]; out[6] = a[6]; out[7] = a[7];
+            out[8] = a[8]; out[9] = a[9]; out[10] = a[10]; out[11] = a[11];
+            out[12] = a[12] + v[0]; out[13] = a[13] + v[1]; out[14] = a[14] + v[2]; out[15] = a[15];
+            return out;
+        }
+
+        // 物理和碰撞检测
+        function checkCollision(x, y, z) {
+            const bx = Math.floor(x);
+            const by = Math.floor(y);
+            const bz = Math.floor(z);
+            
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const block = getBlock(bx + dx, by + dy, bz + dz);
+                        if (block !== 0 && !BLOCK_TYPES[Object.keys(BLOCK_TYPES).find(k => BLOCK_TYPES[k].id === block)]?.liquid) {
+                            const minX = bx + dx;
+                            const maxX = minX + 1;
+                            const minY = by + dy;
+                            const maxY = minY + 1;
+                            const minZ = bz + dz;
+                            const maxZ = minZ + 1;
+                            
+                            if (x + 0.3 > minX && x - 0.3 < maxX &&
+                                y > minY && y - 1.8 < maxY &&
+                                z + 0.3 > minZ && z - 0.3 < maxZ) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function resolveCollision(oldX, oldY, oldZ, newX, newY, newZ) {
+            let x = newX;
+            let y = oldY;
+            let z = newZ;
+
+            // Y轴碰撞
+            if (!checkCollision(oldX, newY - 1.8, oldZ) && !checkCollision(oldX, newY, oldZ)) {
+                y = newY;
+            }
+
+            // X轴碰撞
+            if (!checkCollision(newX, y - 0.9, oldZ)) {
+                x = newX;
+            }
+
+            // Z轴碰撞
+            if (!checkCollision(x, y - 0.9, newZ)) {
+                z = newZ;
+            }
+
+            return { x, y, z, onGround: y === oldY && newY < oldY };
+        }
+
+        // 射线检测（用于方块选择）
+        function raycast(from, dir, maxDist = 5) {
+            let x = from[0];
+            let y = from[1];
+            let z = from[2];
+            
+            const step = 0.1;
+            const dx = dir[0] * step;
+            const dy = dir[1] * step;
+            const dz = dir[2] * step;
+            
+            let lastX = Math.floor(x);
+            let lastY = Math.floor(y);
+            let lastZ = Math.floor(z);
+            
+            for (let i = 0; i < maxDist / step; i++) {
+                x += dx;
+                y += dy;
+                z += dz;
+                
+                const bx = Math.floor(x);
+                const by = Math.floor(y);
+                const bz = Math.floor(z);
+                
+                if (bx !== lastX || by !== lastY || bz !== lastZ) {
+                    const block = getBlock(bx, by, bz);
+                    if (block !== 0 && !BLOCK_TYPES[Object.keys(BLOCK_TYPES).find(k => BLOCK_TYPES[k].id === block)]?.liquid) {
+                        return {
+                            hit: true,
+                            x: bx, y: by, z: bz,
+                            face: [lastX - bx, lastY - by, lastZ - bz]
+                        };
+                    }
+                    lastX = bx; lastY = by; lastZ = bz;
+                }
+            }
+            
+            return { hit: false };
+        }
+
+        // 游戏循环
+        function update(deltaTime) {
+            const cam = state.camera;
+            const speed = cam.flying ? CONFIG.FLY_SPEED : CONFIG.SPEED;
+            
+            // 计算移动方向
+            let moveX = 0;
+            let moveZ = 0;
+            
+            if (state.keys['KeyW']) {
+                moveX += Math.sin(cam.yaw) * speed;
+                moveZ -= Math.cos(cam.yaw) * speed;
+            }
+            if (state.keys['KeyS']) {
+                moveX -= Math.sin(cam.yaw) * speed;
+                moveZ += Math.cos(cam.yaw) * speed;
+            }
+            if (state.keys['KeyA']) {
+                moveX -= Math.cos(cam.yaw) * speed;
+                moveZ -= Math.sin(cam.yaw) * speed;
+            }
+            if (state.keys['KeyD']) {
+                moveX += Math.cos(cam.yaw) * speed;
+                moveZ += Math.sin(cam.yaw) * speed;
+            }
+
+            if (cam.flying) {
+                cam.x += moveX;
+                cam.z += moveZ;
+                if (state.keys['Space']) cam.y += speed;
+                if (state.keys['ShiftLeft']) cam.y -= speed;
+            } else {
+                // 重力
+                cam.vy += CONFIG.GRAVITY * deltaTime;
+                
+                // 跳跃
+                if (state.keys['Space'] && cam.onGround) {
+                    cam.vy = CONFIG.JUMP_FORCE;
+                    cam.onGround = false;
+                }
+
+                const newX = cam.x + moveX;
+                const newY = cam.y + cam.vy;
+                const newZ = cam.z + moveZ;
+                
+                const resolved = resolveCollision(cam.x, cam.y, cam.z, newX, newY, newZ);
+                cam.x = resolved.x;
+                cam.y = resolved.y;
+                cam.z = resolved.z;
+                cam.onGround = resolved.onGround;
+                
+                if (cam.onGround) cam.vy = 0;
+            }
+
+            // 加载/卸载区块
+            const cx = Math.floor(cam.x / CONFIG.CHUNK_SIZE);
+            const cz = Math.floor(cam.z / CONFIG.CHUNK_SIZE);
+            
+            // 加载新区块
+            for (let dx = -CONFIG.RENDER_DISTANCE; dx <= CONFIG.RENDER_DISTANCE; dx++) {
+                for (let dz = -CONFIG.RENDER_DISTANCE; dz <= CONFIG.RENDER_DISTANCE; dz++) {
+                    const key = `${cx + dx},${cz + dz}`;
+                    if (!state.chunks.has(key)) {
+                        state.chunks.set(key, generateChunk(cx + dx, cz + dz));
+                    }
+                }
+            }
+
+            // 卸载远处区块
+            state.chunks.forEach((chunk, key) => {
+                const [ckx, ckz] = key.split(',').map(Number);
+                if (Math.abs(ckx - cx) > CONFIG.RENDER_DISTANCE + 1 || 
+                    Math.abs(ckz - cz) > CONFIG.RENDER_DISTANCE + 1) {
+                    state.chunks.delete(key);
+                    // 清理全局方块引用
+                    for (let x = 0; x < CONFIG.CHUNK_SIZE; x++) {
+                        for (let z = 0; z < CONFIG.CHUNK_SIZE; z++) {
+                            for (let y = 0; y < CONFIG.CHUNK_HEIGHT; y++) {
+                                state.blocks.delete(`${ckx * CONFIG.CHUNK_SIZE + x},${y},${ckz * CONFIG.CHUNK_SIZE + z}`);
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 更新区块网格
+            state.chunks.forEach(chunk => updateChunkMesh(chunk));
+        }
+
+        function render(time) {
+            const canvas = document.getElementById('gameCanvas');
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0.53, 0.81, 0.92, 1.0); // 天空蓝
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.useProgram(program);
+
+            // 设置投影矩阵
+            const projMatrix = mat4();
+            perspective(projMatrix, CONFIG.FOV * Math.PI / 180, canvas.width / canvas.height, CONFIG.NEAR, CONFIG.FAR);
+            gl.uniformMatrix4fv(uniforms.projectionMatrix, false, projMatrix);
+
+            // 设置视图矩阵
+            const cam = state.camera;
+            const center = [
+                cam.x + Math.sin(cam.yaw) * Math.cos(cam.pitch),
+                cam.y + Math.sin(cam.pitch),
+                cam.z - Math.cos(cam.yaw) * Math.cos(cam.pitch)
+            ];
+            const viewMatrix = mat4();
+            lookAt(viewMatrix, [cam.x, cam.y, cam.z], center, [0, 1, 0]);
+            gl.uniformMatrix4fv(uniforms.viewMatrix, false, viewMatrix);
+
+            // 设置相机位置和时间
+            gl.uniform3f(uniforms.cameraPos, cam.x, cam.y, cam.z);
+            gl.uniform1f(uniforms.time, time / 1000);
+
+            // 模型矩阵（单位矩阵）
+            const modelMatrix = mat4();
+            identity(modelMatrix);
+            gl.uniformMatrix4fv(uniforms.modelMatrix, false, modelMatrix);
+
+            // 绑定几何体
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vbo);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.nbo);
+            gl.enableVertexAttribArray(2);
+            gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.tbo);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.ibo);
+
+            // 收集所有实例
+            const instances = [];
+            state.chunks.forEach(chunk => {
+                if (chunk.mesh) {
+                    instances.push(...chunk.mesh);
+                }
+            });
+
+            // 按方块类型和面排序以优化绘制
+            instances.sort((a, b) => a.blockType - b.blockType);
+
+            // 渲染所有面
+            let currentType = -1;
+            instances.forEach(inst => {
+                if (inst.blockType !== currentType) {
+                    currentType = inst.blockType;
+                }
+                
+                // 使用 instancing 或单独绘制
+                // 这里为了简单，我们使用顶点属性传递位置
+                // 实际应该使用 instanced rendering，但为兼容性这里手动变换
+                
+                const faceOffset = inst.face * 4;
+                const x = inst.x;
+                const y = inst.y;
+                const z = inst.z;
+                
+                // 创建变换矩阵
+                const transform = mat4();
+                identity(transform);
+                translate(transform, transform, [x, y, z]);
+                gl.uniformMatrix4fv(uniforms.modelMatrix, false, transform);
+                
+                // 传递方块类型
+                gl.vertexAttrib1f(3, inst.blockType);
+                
+                // 绘制这个面
+                gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, inst.face * 6 * 2);
+            });
+
+            // 渲染选中方块的高亮框
+            const ray = raycast([cam.x, cam.y, cam.z], [
+                Math.sin(cam.yaw) * Math.cos(cam.pitch),
+                Math.sin(cam.pitch),
+                -Math.cos(cam.yaw) * Math.cos(cam.pitch)
+            ]);
+            
+            if (ray.hit) {
+                // 这里可以添加线框渲染来高亮选中的方块
+            }
+        }
+
+        // 输入处理
+        function setupInputs() {
+            document.addEventListener('keydown', (e) => {
+                state.keys[e.code] = true;
+                
+                if (e.code === 'Digit1') selectSlot(0);
+                if (e.code === 'Digit2') selectSlot(1);
+                if (e.code === 'Digit3') selectSlot(2);
+                if (e.code === 'Digit4') selectSlot(3);
+                if (e.code === 'Digit5') selectSlot(4);
+                if (e.code === 'Digit6') selectSlot(5);
+                if (e.code === 'Digit7') selectSlot(6);
+                if (e.code === 'Digit8') selectSlot(7);
+                if (e.code === 'Digit9') selectSlot(8);
+                
+                if (e.code === 'KeyF') {
+                    state.camera.flying = !state.camera.flying;
+                    state.camera.vy = 0;
+                }
+                
+                if (e.code === 'Space' && !state.camera.flying) {
+                    e.preventDefault();
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                state.keys[e.code] = false;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (state.mouse.locked) {
+                    state.camera.yaw += e.movementX * 0.002;
+                    state.camera.pitch -= e.movementY * 0.002;
+                    state.camera.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, state.camera.pitch));
+                }
+            });
+
+            document.addEventListener('mousedown', (e) => {
+                if (!state.mouse.locked) {
+                    document.getElementById('gameCanvas').requestPointerLock();
+                    return;
+                }
+
+                const cam = state.camera;
+                const dir = [
+                    Math.sin(cam.yaw) * Math.cos(cam.pitch),
+                    Math.sin(cam.pitch),
+                    -Math.cos(cam.yaw) * Math.cos(cam.pitch)
+                ];
+
+                if (e.button === 0) { // 左键破坏
+                    const hit = raycast([cam.x, cam.y, cam.z], dir);
+                    if (hit.hit) {
+                        setBlock(hit.x, hit.y, hit.z, 0);
+                    }
+                } else if (e.button === 2) { // 右键放置
+                    const hit = raycast([cam.x, cam.y, cam.z], dir);
+                    if (hit.hit) {
+                        const nx = hit.x + hit.face[0];
+                        const ny = hit.y + hit.face[1];
+                        const nz = hit.z + hit.face[2];
+                        
+                        // 检查是否会与玩家碰撞
+                        if (!checkCollision(nx + 0.5, ny + 0.5, nz + 0.5)) {
+                            setBlock(nx, ny, nz, state.selectedBlock);
+                        }
+                    }
+                }
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                state.mouse.locked = document.pointerLockElement === document.getElementById('gameCanvas');
+            });
+
+            document.addEventListener('contextmenu', e => e.preventDefault());
+            
+            // 滚轮切换
+            document.addEventListener('wheel', (e) => {
+                const slots = document.querySelectorAll('.slot');
+                let current = Array.from(slots).findIndex(s => s.classList.contains('active'));
+                if (e.deltaY > 0) {
+                    current = (current + 1) % 9;
+                } else {
+                    current = (current - 1 + 9) % 9;
+                }
+                selectSlot(current);
+            });
+        }
+
+        function selectSlot(index) {
+            document.querySelectorAll('.slot').forEach((s, i) => {
+                s.classList.toggle('active', i === index);
+            });
+            const blockType = document.querySelectorAll('.slot')[index].dataset.block;
+            state.selectedBlock = BLOCK_TYPES[blockType].id;
+        }
+
+        // 主循环
+        function gameLoop(time) {
+            const deltaTime = Math.min((time - state.lastTime) / 16, 2);
+            state.lastTime = time;
+
+            update(deltaTime);
+            render(time);
+
+            // FPS 计算
+            state.frameCount++;
+            if (time - state.lastFpsTime > 1000) {
+                state.fps = state.frameCount;
+                state.frameCount = 0;
+                state.lastFpsTime = time;
+                document.getElementById('fps').textContent = `FPS: ${state.fps} | 区块: ${state.chunks.size} | 飞行: ${state.camera.flying ? 'ON' : 'OFF'}`;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 初始化
+        async function init() {
+            if (!initWebGL()) return;
+            
+            setupInputs();
+            
+            // 生成初始世界
+            const totalChunks = (CONFIG.RENDER_DISTANCE * 2 + 1) ** 2;
+            let loaded = 0;
+            
+            for (let x = -CONFIG.RENDER_DISTANCE; x <= CONFIG.RENDER_DISTANCE; x++) {
+                for (let z = -CONFIG.RENDER_DISTANCE; z <= CONFIG.RENDER_DISTANCE; z++) {
+                    state.chunks.set(`${x},${z}`, generateChunk(x, z));
+                    loaded++;
+                    document.getElementById('progress').style.width = `${(loaded / totalChunks) * 100}%`;
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+            
+            document.getElementById('loading').style.display = 'none';
+            
+            // 找到地面位置
+            let groundY = CONFIG.CHUNK_HEIGHT;
+            while (groundY > 0 && getBlock(0, groundY, 0) === 0) groundY--;
+            state.camera.y = groundY + 2;
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 窗口调整
+        window.addEventListener('resize', () => {
+            const canvas = document.getElementById('gameCanvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // 启动游戏
+        init();
+    </script>
+</body>
+</html>
